@@ -1,6 +1,11 @@
 (() => {
   "use strict";
 
+  /* ============ ENABLE JS-DEPENDENT ANIMATIONS ============ */
+  // Only hide/reveal content once we know JS is actually running.
+  // Without this, a script error would leave real content permanently invisible.
+  document.documentElement.classList.add("js-ready");
+
   /* ============ THEME TOGGLE ============ */
   const root = document.documentElement;
   const themeBtn = document.getElementById("themeToggle");
@@ -42,15 +47,26 @@
 
   /* ============ SCROLL REVEAL ============ */
   const revealEls = document.querySelectorAll("[data-reveal]");
-  const revealObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add("is-visible");
-        revealObserver.unobserve(entry.target);
-      }
-    });
-  }, { threshold: 0.15 });
-  revealEls.forEach(el => revealObserver.observe(el));
+  try {
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("is-visible");
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.15 });
+    revealEls.forEach(el => revealObserver.observe(el));
+  } catch (err) {
+    // IntersectionObserver unsupported or failed — reveal everything immediately.
+    revealEls.forEach(el => el.classList.add("is-visible"));
+  }
+
+  // Safety net: no matter what happens above, force every element visible
+  // after 2.5s so a stuck animation can never hide real content long-term.
+  setTimeout(() => {
+    revealEls.forEach(el => el.classList.add("is-visible"));
+  }, 2500);
 
   /* ============ SKILL BAR FILL (animate once visible) ============ */
   const skillSection = document.getElementById("skills");
