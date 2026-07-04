@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://anirbanmahanta.github.io/sitemap.xml
