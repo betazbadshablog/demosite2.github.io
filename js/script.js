@@ -7,111 +7,107 @@
   document.documentElement.classList.add("js-ready");
 
   /* ============ ANIMATED BACKGROUND (particle network) ============ */
-  try {
-    const canvas = document.getElementById("bgCanvas");
-    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  (function () {
+  const canvas = document.getElementById('network-bg');
+  const ctx = canvas.getContext('2d');
 
-    if (canvas && !prefersReducedMotion) {
-      const ctx = canvas.getContext("2d");
-      let width, height, particles, rafId;
-      let running = true;
+  // ---- config ----
+  const DOT_COLOR = 'rgba(212, 175, 55, 0.85)';   // gold
+  const LINE_COLOR = 'rgba(212, 175, 55,';        // gold, alpha added dynamically
+  const DOT_RADIUS = 1.8;
+  const LINK_DISTANCE = 140;      // max distance to draw a connecting line
+  const PARTICLE_DENSITY = 9000;  // lower = more particles (px^2 per particle)
+  const SPEED = 0.25;             // drift speed
+  const MOUSE_RADIUS = 160;       // how far the cursor pushes/attracts dots
 
-      const getThemeColors = () => {
-        const styles = getComputedStyle(document.documentElement);
-        return {
-          a: styles.getPropertyValue("--accent").trim() || "#E8A94A",
-          b: styles.getPropertyValue("--accent-2").trim() || "#45D9C0"
-        };
-      };
+  let width, height, particles, mouse = { x: null, y: null };
 
-      const hexToRgb = (hex) => {
-        const h = hex.replace("#", "");
-        const bigint = parseInt(h.length === 3
-          ? h.split("").map(c => c + c).join("")
-          : h, 16);
-        return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
-      };
-
-      function resize() {
-        width = canvas.width = window.innerWidth;
-        height = canvas.height = window.innerHeight;
-      }
-
-      function initParticles() {
-        const density = Math.min(70, Math.floor((width * height) / 18000));
-        particles = Array.from({ length: density }, () => ({
-          x: Math.random() * width,
-          y: Math.random() * height,
-          vx: (Math.random() - 0.5) * 0.35,
-          vy: (Math.random() - 0.5) * 0.35,
-          r: Math.random() * 1.6 + 0.6
-        }));
-      }
-
-      function step() {
-        if (!running) return;
-        const { a, b } = getThemeColors();
-        const [ar, ag, ab] = hexToRgb(a);
-        const [br, bg, bb] = hexToRgb(b);
-
-        ctx.clearRect(0, 0, width, height);
-
-        particles.forEach(p => {
-          p.x += p.vx;
-          p.y += p.vy;
-          if (p.x < 0 || p.x > width) p.vx *= -1;
-          if (p.y < 0 || p.y > height) p.vy *= -1;
-        });
-
-        // connecting lines between nearby particles
-        for (let i = 0; i < particles.length; i++) {
-          for (let j = i + 1; j < particles.length; j++) {
-            const dx = particles[i].x - particles[j].x;
-            const dy = particles[i].y - particles[j].y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            const maxDist = 140;
-            if (dist < maxDist) {
-              const alpha = (1 - dist / maxDist) * 0.35;
-              ctx.strokeStyle = `rgba(${ar},${ag},${ab},${alpha})`;
-              ctx.lineWidth = 1;
-              ctx.beginPath();
-              ctx.moveTo(particles[i].x, particles[i].y);
-              ctx.lineTo(particles[j].x, particles[j].y);
-              ctx.stroke();
-            }
-          }
-        }
-
-        // dots
-        particles.forEach((p, idx) => {
-          const [r, g, bl] = idx % 2 === 0 ? [ar, ag, ab] : [br, bg, bb];
-          ctx.fillStyle = `rgba(${r},${g},${bl},0.75)`;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-          ctx.fill();
-        });
-
-        rafId = requestAnimationFrame(step);
-      }
-
-      resize();
-      initParticles();
-      step();
-
-      window.addEventListener("resize", () => {
-        resize();
-        initParticles();
-      });
-
-      document.addEventListener("visibilitychange", () => {
-        running = !document.hidden;
-        if (running) step();
-        else cancelAnimationFrame(rafId);
-      });
-    }
-  } catch (err) {
-    // Background animation is decorative only — fail silently, never block the page.
+  function resize() {
+    width = canvas.width = window.innerWidth;
+    height = canvas.height = window.innerHeight;
+    initParticles();
   }
+
+  function initParticles() {
+    const count = Math.floor((width * height) / PARTICLE_DENSITY);
+    particles = Array.from({ length: count }, () => ({
+      x: Math.random() * width,
+      y: Math.random() * height,
+      vx: (Math.random() - 0.5) * SPEED,
+      vy: (Math.random() - 0.5) * SPEED
+    }));
+  }
+
+  function step() {
+    ctx.clearRect(0, 0, width, height);
+
+    // move + draw dots
+    for (const p of particles) {
+      p.x += p.vx;
+      p.y += p.vy;
+
+      if (p.x < 0 || p.x > width) p.vx *= -1;
+      if (p.y < 0 || p.y > height) p.vy *= -1;
+
+      // gentle mouse influence
+      if (mouse.x !== null) {
+        const dx = p.x - mouse.x;
+        const dy = p.y - mouse.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < MOUSE_RADIUS) {
+          const force = (MOUSE_RADIUS - dist) / MOUSE_RADIUS;
+          p.x += (dx / dist) * force * 1.2;
+          p.y += (dy / dist) * force * 1.2;
+        }
+      }
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, DOT_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = DOT_COLOR;
+      ctx.fill();
+    }
+
+    // draw connecting lines between nearby dots
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const a = particles[i], b = particles[j];
+        const dx = a.x - b.x, dy = a.y - b.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < LINK_DISTANCE) {
+          const alpha = 1 - dist / LINK_DISTANCE;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.strokeStyle = LINE_COLOR + (alpha * 0.35) + ')';
+          ctx.lineWidth = 0.6;
+          ctx.stroke();
+        }
+      }
+    }
+
+    requestAnimationFrame(step);
+  }
+
+  window.addEventListener('resize', resize);
+  window.addEventListener('mousemove', (e) => {
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+  });
+  window.addEventListener('mouseout', () => {
+    mouse.x = null;
+    mouse.y = null;
+  });
+
+  // respect reduced-motion preference
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  resize();
+  if (!prefersReducedMotion) {
+    requestAnimationFrame(step);
+  } else {
+    step(); // draw one static frame only
+  }
+})();
 
   /* ============ THEME TOGGLE ============ */
   const root = document.documentElement;
